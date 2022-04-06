@@ -1,5 +1,6 @@
 default:
   serverbase:       'https://mii-agiop-3p.life.uni-leipzig.de/fhir/'
+  recordedDate_custom: 'recordedDate'
 # if you need to authenticate on your fhir server, set username and password
   username:        NULL
   password:        NULL

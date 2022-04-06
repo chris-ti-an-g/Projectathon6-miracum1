@@ -26,6 +26,13 @@ if((conf$http_proxy)!= ""){Sys.setenv(http_proxy  = conf$http_proxy)}
 if((conf$https_proxy)!= ""){Sys.setenv(https_proxy  = conf$https_proxy)}
 if((conf$no_proxy)!= ""){Sys.setenv(no_proxy  = conf$no_proxy)}
 
+# check for custom recordedDate
+if (length(conf$recordedDate_custom) >=1) {
+  recorded_date_custom = conf$recordedDate_col
+} else {
+  recorded_date_custom = "recordedDate"
+}
+
 brackets = c("[", "]")
 sep = " || "
 ############Data extraction#############################
@@ -68,7 +75,7 @@ encounters <- fhir_table_description(resource = "Encounter",
 
 condition <- fhir_table_description(resource = "Condition",
                                     cols = c(condition_id = "id",
-                                             recorded_date= "recordedDate",
+                                             recorded_date= recorded_date_custom,
                                              icd = "code/coding/code",
                                              system         = "code/coding/system",
                                              encounter_id = "encounter/reference",
@@ -114,7 +121,7 @@ print(end_time - start_time)
 ### extraction for covering the cases who doesn't have a link of condition in the encounter resource
 condition_request_2 <- fhir_url(url = conf$serverbase, 
                               resource = "Condition", 
-                              parameters = c("recorded-date" = "ge2015-01-01",
+                              parameters = c(recorded_date_custom = "ge2015-01-01",
                                              "code"="I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!",
                                              "_include" = "Condition:encounter",
                                              "_include"="Condition:subject"
@@ -400,7 +407,7 @@ if(nrow(df.observation) > 0){
 
 condition <- fhir_table_description(resource = "Condition",
                                     cols = c(condition_id = "id",
-                                             recorded_date= "recordedDate",
+                                             recorded_date = recorded_date_custom,
                                              icd = "code/coding/code",
                                              system         = "code/coding/system",
                                              patient_id     = "subject/reference"),
