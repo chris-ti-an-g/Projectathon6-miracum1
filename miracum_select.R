@@ -353,6 +353,21 @@ if(nrow(df.procedure) > 0){
 #######################################################################################################################
 #extract observation resource for the required patient ids and loinc codes
 
+patient_ids <- unique(df.encounters$patient_id)
+loincs_string <- "777-3,26515-7,778-1,49497-1,32207-3,51631-0,32623-1,28542-9,6301-6,34714-6,5894-1,3173-2,14979-9,3243-3,14182-0,3255-7,48664-7,7799-0,48067-3,48065-7,2160-0,14682-9,62238-1,50210-4,77147-7,50384-7,2951-2,2823-3,2075-0,2601-3,14798-3,2498-4,3034-6,2276-4,20567-4,789-8,26453-1,790-6,787-2,30428-7,718-7,59260-0,55782-7,20509-6,20570-8,4544-3,71833-8,31100-1,2093-3,14647-2,18262-6,69419-0,2089-1,49132-4,13457-7,22748-8,39469-2,2085-9,14646-4,49130-8,2571-8,14927-8,1751-7,61151-7,2862-1,61152-5,54347-0,2345-7,14749-6,2339-0,2341-6,2340-8,15074-8,41651-1,39481-7,41652-9,39480-9,17856-6,4549-2,59261-8,4548-4,17855-8"
+nchar_loincs <- nchar(loincs_string)
+nchar_for_ids <- 1800 - (nchar(conf$serverbase)+nchar_loincs)
+n <- length(patient_ids)
+list <- split(patient_ids, ceiling(seq_along(patient_ids)/n)) 
+nchar <- sapply(list, function(x){sum(nchar(x))+(length(x)-1)}) 
+
+#reduce the chunk size until number of characters is small enough
+while(any(nchar > nchar_for_ids)){
+  n <- n/2
+  list <- split(patient_ids, ceiling(seq_along(patient_ids)/n))
+  nchar <- sapply(list, function(x){sum(nchar(x))+(length(x)-1)})
+}
+
 observation <- fhir_table_description(resource = "Observation",
                                       cols = c(observation_id = "id",
                                                effective_date= "effectiveDateTime",
@@ -370,7 +385,51 @@ observation <- fhir_table_description(resource = "Observation",
 
 df.observation <<- data.table()
 
-observation_list  <- lapply(list, function(x){
+time_tmp_start <- Sys.time()
+
+# observation_list  <- lapply(list, function(x){
+for (name in names(list)) {
+  x <- list[[name]]
+  
+  time_tmp_elapsed <-
+    difftime(Sys.time(), time_tmp_start, units = "secs")
+  time_tmp_elapsed_print <-
+    ifelse(
+      test = time_tmp_elapsed > 60,
+      yes = ifelse(
+        test = time_tmp_elapsed > 3600,
+        yes = paste0(round(time_tmp_elapsed / 3600, digits = 2), " h"),
+        no = paste0(round(time_tmp_elapsed / 60, digits = 2), " min")
+      ),
+      no = paste0(round(time_tmp_elapsed, digits = 2), " sec")
+    )
+  time_tmp_remaining <-
+    (time_tmp_elapsed / as.numeric(name)) * (length(list) - as.numeric(name))
+  time_tmp_remaining_print <- ifelse(
+    test = time_tmp_remaining > 60,
+    yes = ifelse(
+      test = time_tmp_remaining > 3600,
+      yes = paste0(round(time_tmp_remaining / 3600, digits = 2), " h"),
+      no = paste0(round(time_tmp_remaining / 60, digits = 2), " min")
+    ),
+    no = paste0(round(time_tmp_remaining, digits = 2), " sec")
+  )
+  print(
+    paste0(
+      "Iteration ",
+      name,
+      " of ",
+      length(list),
+      " (",
+      round((as.numeric(name) / length(list)) * 100, digits = 2),
+      " %), Time elapsed: ",
+      time_tmp_elapsed_print,
+      " (Remaining: ~ ",
+      time_tmp_remaining_print,
+      ")"
+    )
+  )
+  
   
   ids <- paste(x, collapse = ",")
   
@@ -379,17 +438,20 @@ observation_list  <- lapply(list, function(x){
   obs_request <- fhir_url(url = conf$serverbase,
                           resource = "Observation",
                           parameters = c(subject = ids
-                                         ,"code" = "777-3,26515-7,778-1,49497-1,32207-3,51631-0,32623-1,28542-9,6301-6,34714-6,5894-1,3173-2,14979-9,3243-3,14182-0,3255-7,48664-7,7799-0,48067-3,48065-7,2160-0,14682-9,62238-1,50210-4,77147-7,50384-7,2951-2,2823-3,2075-0,2601-3,14798-3,2498-4,3034-6,2276-4,20567-4,789-8,26453-1,790-6,787-2,30428-7,718-7,59260-0,55782-7,20509-6,20570-8,4544-3,71833-8,31100-1,2093-3,14647-2,18262-6,69419-0,2089-1,49132-4,13457-7,22748-8,39469-2,2085-9,14646-4,49130-8,2571-8,14927-8,1751-7,61151-7,2862-1,61152-5,54347-0,2345-7,14749-6,2339-0,2341-6,2340-8,15074-8,41651-1,39481-7,41652-9,39480-9,17856-6,4549-2,59261-8,4548-4,17855-8"))
-  
+                                         ,"code" = loincs_string))
+                                         # ,"code" = "777-3,26515-7,778-1,49497-1,32207-3,51631-0,32623-1,28542-9,6301-6,34714-6,5894-1,3173-2,14979-9,3243-3,14182-0,3255-7,48664-7,7799-0"))
   obs_bundles <- fhir_search(obs_request,
                              username = conf$username,
                              password = conf$password,
                              log_errors = "errors/Observations_error.xml")
 
   obs_table <- fhir_crack(obs_bundles, design = observation)
-  df.observation <<- rbind(df.observation, obs_table, fill=TRUE)
+  df.observation <<- rbind(df.observation, obs_table, fill = TRUE)
   
-})
+}
+# )
+
+print("Finished extracting the Observation ressources. Starting to analyze them.")
 
 #process observations_raw resources
 if(nrow(df.observation) > 0){
@@ -410,6 +472,20 @@ if(nrow(df.observation) > 0){
 }
 #######################################################################################################################
 #extract the diagnosis resource based on patient ids
+
+patient_ids <- unique(df.encounters$patient_id)
+nchar_for_ids <- 1800 - nchar(conf$serverbase)
+n <- length(patient_ids)
+list <- split(patient_ids, ceiling(seq_along(patient_ids)/n)) 
+nchar <- sapply(list, function(x){sum(nchar(x))+(length(x)-1)}) 
+
+#reduce the chunk size until number of characters is small enough
+while(any(nchar > nchar_for_ids)){
+  n <- n/2
+  list <- split(patient_ids, ceiling(seq_along(patient_ids)/n))
+  nchar <- sapply(list, function(x){sum(nchar(x))+(length(x)-1)})
+}
+
 
 condition <- fhir_table_description(resource = "Condition",
                                     cols = c(condition_id = "id",
@@ -606,13 +682,13 @@ if(nrow(df.medstatement)>0){
                                   username = conf$username,
                                   password = conf$password,
                                   log_errors = "errors/medication_error.xml")
-
     
+  
     med_table <- fhir_crack(medication_bundle,design = medication)
     df.medication <<- rbind(df.medication, med_table)
   }) # lapply()
   
-  if(nrow(df.medication >0 )){
+  if(exists("df.medication") && nrow(df.medication) > 0){
     
     #process Medication statement  resources
     df.medication <- fhir_rm_indices(df.medication, brackets = brackets )
@@ -648,10 +724,10 @@ df.cohort <- df.cohort%>%
         mutate(rank_indicator = min(rank))
 
 #update rank mapping
-rank_dict <- c("Primary","Secondary",NA)
-names(rank_dict) <- c(1,2,NA)
-df.cohort$rank_indicator <- rank_dict[ as.character(df.cohort$rank_indicator) ]
 
+
+df.cohort$rank_indicator[c(which(df.cohort$rank_indicator ==1 ))] <- "Primary" 
+df.cohort$rank_indicator[c(which(df.cohort$rank_indicator ==2 ))] <- "Secondary" 
 
 
 
@@ -701,7 +777,7 @@ if(nrow(df.cohort) > 0){
               diag_i61_encounters = length(unique(encounter_id[which(icd_family == 'I61')])),
               diag_i63_encounters = length(unique(encounter_id[which(icd_family == 'I63')]))
               )
-  
+  patclass.diaguse[is.na(patclass.diaguse)] <- "NA"
   openxlsx:::addWorksheet(wb, "PatientClass_DiagnosisUse")
   openxlsx:::writeDataTable(wb = wb,x = patclass.diaguse,sheet = "PatientClass_DiagnosisUse", withFilter = FALSE)
   
@@ -716,7 +792,8 @@ if(nrow(df.cohort) > 0){
               diag_i60_encounters = length(unique(encounter_id[which(icd_family == 'I60')])),
               diag_i61_encounters = length(unique(encounter_id[which(icd_family == 'I61')])),
               diag_i63_encounters = length(unique(encounter_id[which(icd_family == 'I63')]))
-    )                   
+    )   
+  patclas.rank[is.na(patclas.rank)] <- "NA"
   openxlsx:::addWorksheet(wb, "PatientClass_Rank")
   openxlsx:::writeDataTable(wb = wb,x = patclas.rank,sheet = "PatientClass_Rank", withFilter = FALSE)
 
@@ -733,7 +810,7 @@ if(nrow(df.cohort) > 0){
               diag_i61_encounters = length(unique(encounter_id[which(icd_family == 'I61')])),
               diag_i63_encounters = length(unique(encounter_id[which(icd_family == 'I63')]))
               ) 
-  
+  patclass.rank.diaguse[is.na(patclass.rank.diaguse)] <- "NA"
   openxlsx:::addWorksheet(wb, "PatientClass_Rank_DiagnosisUse")
   openxlsx:::writeDataTable(wb = wb,x = patclass.rank.diaguse,sheet = "PatientClass_Rank_DiagnosisUse", withFilter = FALSE)
 
@@ -745,6 +822,8 @@ if(nrow(df.cohort) > 0){
               ,number_of_visits =length(unique((encounter_id))))%>%
     group_by(diag_rank,number_of_visits)%>%
     summarise(count_unique_patient = length(unique(patient_id)))
+  
+  df.pat.cases[is.na(df.pat.cases)] <- "NA"
   openxlsx:::addWorksheet(wb, "Multiple_Patient_Visit")
   openxlsx:::writeDataTable(wb = wb,x = df.pat.cases,sheet = "Multiple_Patient_Visit", withFilter = FALSE)
 
@@ -756,7 +835,7 @@ if(nrow(df.cohort) > 0){
       arrange(desc(count_encounters))
   
   df.plz$count_encounters[c(which(df.plz$count_encounters < 5))] <- "< 5"
-  
+  df.plz[is.na(df.plz)] <- "NA"
   openxlsx:::addWorksheet(wb, "PLZ")
   openxlsx:::writeDataTable(wb = wb,x = df.plz,sheet = "PLZ", withFilter = FALSE)
 
@@ -768,7 +847,7 @@ if(nrow(df.cohort) > 0){
           ,count_encounters = count_encounters  + ifelse(test = count_encounters>5,sample(-5:5, 1,replace = TRUE),sample(0:5, 1,replace = TRUE))
           ,percent_encounters = paste0(ceiling(count_encounters/length(unique(df.cohort.trunc$encounter_id))*100)," %")
               )
-
+  df.conditions.summary[is.na(df.conditions.summary)] <- "NA"
   openxlsx:::addWorksheet(wb, "Stroke_ICD_Summary")
   openxlsx:::writeDataTable(wb = wb,x = df.conditions.summary,sheet = "Stroke_ICD_Summary", withFilter = FALSE)
 
@@ -779,22 +858,25 @@ ICD.rank <- df.cohort%>%
     group_by(encounter_id,rank_indicator)%>%
     summarise(icd_counts= length(unique(icd)))%>%
     group_by(icd_counts,rank_indicator)%>%summarise(encounters= length(unique(encounter_id)))
+
+  ICD.rank[is.na(ICD.rank)] <- "NA"  
 openxlsx:::addWorksheet(wb, "ICD_Rank_Summary")
 openxlsx:::writeDataTable(wb = wb,x = ICD.rank,sheet = "ICD_Rank_Summary", withFilter = FALSE)
 
 #8. ################################################################################# 
   #Monthly counts for different ICDS
-df.cohort$year_month <- substr(coalesce(as.character(df.cohort$admission_date),as.character(df.cohort$recorded_date)),1,7)
-monthly <- df.cohort%>%
-  group_by(year_month)%>%
-  summarise(count_unique_patient = length(unique(patient_id)), 
-            count_unique_encounters = length(unique(encounter_id)),
-            all_encounters = length(encounter_id),
-            diag_i60_encounters = length(unique(encounter_id[which(icd_family == 'I60')])),
-            diag_i61_encounters = length(unique(encounter_id[which(icd_family == 'I61')])),
-            diag_i63_encounters = length(unique(encounter_id[which(icd_family == 'I63')]))
-  ) 
-monthly[,c(2:7)] <- lapply(monthly[,c(2:7)], function(x) ifelse(x<5, "< 5", x))
+  df.cohort$year_month <- substr(coalesce(as.character(df.cohort$admission_date),as.character(df.cohort$recorded_date)),1,7)
+  monthly <- df.cohort%>%
+    group_by(year_month)%>%
+    summarise(count_unique_patient = length(unique(patient_id)), 
+              count_unique_encounters = length(unique(encounter_id)),
+              all_encounters = length(encounter_id),
+              diag_i60_encounters = length(unique(encounter_id[which(icd_family == 'I60')])),
+              diag_i61_encounters = length(unique(encounter_id[which(icd_family == 'I61')])),
+              diag_i63_encounters = length(unique(encounter_id[which(icd_family == 'I63')]))
+    ) 
+  monthly[,c(2:7)] <- lapply(monthly[,c(2:7)], function(x) ifelse(x<5, "< 5", x))
+  monthly[is.na(monthly)] <- "NA"
 openxlsx:::addWorksheet(wb, "Monthly_Summary")
 openxlsx:::writeDataTable(wb = wb,x = monthly,sheet = "Monthly_Summary", withFilter = FALSE)
 }
@@ -809,7 +891,7 @@ if(nrow(df.procedure) > 0){
     summarise(count_encounters = length(unique(encounter_id))
               ,count_encounters = count_encounters  + ifelse(test = count_encounters>5,sample(-5:5, 1,replace = TRUE),sample(0:5, 1,replace = TRUE))
               ,percent_encounters = paste0(ceiling(count_encounters/length(unique(df.cohort.trunc$encounter_id))*100)," %"))
-  
+  df.procedure.summary[is.na(df.procedure.summary)] <- "NA"
   openxlsx:::addWorksheet(wb, "Different_Procedures")
   openxlsx:::writeDataTable(wb = wb,x = df.procedure.summary,sheet = "Different_Procedures", withFilter = FALSE)
 }
@@ -826,6 +908,8 @@ if(nrow(df.conditions.previous) > 0){
               ,count_encounters = count_encounters  + ifelse(test = count_encounters>5,sample(-5:5, 1,replace = TRUE),sample(0:5, 1,replace = TRUE))
               ,percent_encounters = paste0(ceiling(count_encounters/length(unique(df.cohort.trunc$encounter_id))*100)," %"))
   
+  df.conditions.previous.summary[is.na(df.conditions.previous.summary)] <- "NA"
+  
   openxlsx:::addWorksheet(wb, "Previous_Comorbidities")
   openxlsx:::writeDataTable(wb = wb,x = df.conditions.previous.summary,sheet = "Previous_Comorbidities", withFilter = FALSE)
 }
@@ -839,19 +923,20 @@ if(nrow(df.observation) > 0){
               ,count_encounters = count_encounters  + ifelse(test = count_encounters>5,sample(-5:5, 1,replace = TRUE),sample(0:5, 1,replace = TRUE))
               ,percent_encounters = paste0(ceiling(count_encounters/length(unique(df.cohort.trunc$encounter_id))*100)," %"))
   
+  df.observation.summary[is.na(df.observation.summary)] <- "NA"
   openxlsx:::addWorksheet(wb, "Lab_Values")
   openxlsx:::writeDataTable(wb = wb,x = df.observation.summary,sheet = "Lab_Values", withFilter = FALSE)
 }
 
 #12. #################################################################################  
 #medication summary
-if(nrow(df.medstatement) > 0){
+if(exists("df.medication") && nrow(df.medication) > 0){
   df.med.summary <- df.medstatement%>%
     group_by(code) %>%
     summarise(count_encounters = length(unique(encounter_id)) 
               ,count_encounters = count_encounters  + ifelse(test = count_encounters>5,sample(-5:5, 1,replace = TRUE),sample(0:5, 1,replace = TRUE))
               ,percent_encounters = paste0(ceiling(count_encounters/length(unique(df.cohort.trunc$encounter_id))*100)," %"))
-  
+  df.med.summary[is.na(df.med.summary)] <- "NA"
   openxlsx:::addWorksheet(wb, "Medication")
   openxlsx:::writeDataTable(wb = wb,x = df.med.summary,sheet = "Medication", withFilter = FALSE)
 }
