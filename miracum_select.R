@@ -40,13 +40,38 @@ sep = " || "
 ############Data extraction#############################
 ##extract the condition resources of the list of stroke ICD's greather than 2015-01-01 and extract the associated patient, encounter, condition and procedure resource
 #configure the fhir search url
-encounter_request <- fhir_url(url = conf$serverbase,
-                              resource = "Encounter",
-                              parameters = c("date" = "ge2015-01-01",
-                                             "diagnosis:Condition.code"="I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!",
-                                             "_include" = "Encounter:patient",
-                                             "_include"="Encounter:diagnosis"
-                              ))
+
+if (recorded_date_custom == "recordedDate") {
+  cond_date <- "recorded-date"
+}else{
+  cond_date <- "onset-date"
+}
+
+encounter_request <- fhir_url(url = conf$serverbase, 
+                                resource = "Encounter",
+                                setNames(
+                                  object = c("ge2015-01-01"
+                                             ,"I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!"
+                                             #,"Encounter:diagnosis"
+                                             ,"Encounter:patient"
+                                             ,"Encounter:diagnosis"
+                                  ),
+                                  nm = c(cond_date,
+                                         "diagnosis:Condition.code"
+                                         #,"_revinclude"
+                                         ,"_include"
+                                         ,"_include"
+                                  )
+                                )
+                              )
+
+# encounter_request <- fhir_url(url = conf$serverbase,
+#                               resource = "Encounter",
+#                               parameters = c("date" = "ge2015-01-01",
+#                                              "diagnosis:Condition.code"="I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!",
+#                                              "_include" = "Encounter:patient",
+#                                              "_include" = "Encounter:diagnosis"
+#                               ))
 
 # design parameter for Patient, Encounter, condition and procedure  resources as per fhir_crack function requirement
 patients <- fhir_table_description(resource = "Patient",
@@ -121,15 +146,33 @@ print(end_time - start_time)
 
 #extract condition resource based on the list of ICD and include Condition:encounter, Condition:subject/patient
 
+condition_request_2 <- fhir_url(url = conf$serverbase, 
+                                resource = "Condition",
+                                setNames(
+                                  object = c("ge2015-01-01"
+                                             ,"I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!"
+                                             #,"Encounter:diagnosis"
+                                             ,"Condition:encounter"
+                                             ,"Condition:subject"
+                                  ),
+                                  nm = c(cond_date,
+                                         "code"
+                                         #,"_revinclude"
+                                         ,"_include"
+                                         ,"_include"
+                                  )
+                                )
+                              )
+
 
 ### extraction for covering the cases who doesn't have a link of condition in the encounter resource
-condition_request_2 <- fhir_url(url = conf$serverbase, 
-                              resource = "Condition", 
-                              parameters = c(recorded_date = "ge2015-01-01",
-                                             "code"="I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!",
-                                             "_include" = "Condition:encounter",
-                                             "_include"="Condition:subject"
-                              ))
+# condition_request_2 <- fhir_url(url = conf$serverbase, 
+#                               resource = "Condition", 
+#                               parameters = c(recorded_date = "ge2015-01-01",
+#                                              "code"="I60.0,I60.1,I60.2,I60.3,I60.4,I60.5,I60.6,I60.7,I60.8,I60.9,I61.0,I61.1,I61.2,I61.3,I61.4,I61.5,I61.6,I61.8,I61.9,I63.0,I63.1,I63.2,I63.3,I63.4,I63.5,I63.6,I63.8,I63.9,I67.80!",
+#                                              "_include" = "Condition:encounter",
+#                                              "_include"="Condition:subject"
+#                               ))
 
 #Download in 100er batches and crack immediately, then append to combined tables from above
 start_time <- Sys.time()

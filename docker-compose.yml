@@ -9,4 +9,6 @@ services:
       - ./Ergebnisse:/Ergebnisse
       - ./config.yml:/config.yml
     #      - ./localca.pem:/usr/local/share/ca-certificates/localca.crt
-    image: "nandhinis08/projectathon6-miracum1"
+    image: "nandhinis08/projectathon6-miracum1-new"
+    environment:
+      no_proxy: 'localhost,127.0.0.1,10.210.109.211'
